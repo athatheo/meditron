@@ -440,7 +440,7 @@ def main(args):
         metrics["model"] = model,
         del metrics["ignored"]
 
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=run_name)
+        wandb.init(project="choppertron", entity="medical-llms", name=run_name)
         artifact = wandb.Artifact(run_name, type="dataset", metadata=metrics)
         artifact.add_file(path)
         wandb.log_artifact(artifact)

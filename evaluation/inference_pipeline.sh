@@ -2,7 +2,7 @@
 
 declare -A checkpoints
 
-CHECKPOINT_DIR="/pure-mlo-scratch/trial-runs/"
+CHECKPOINT_DIR="home/ubuntu/pure-mlo-scratch/"
 
 checkpoints=(["mpt"]="mosaicml/mpt-7b" \
              ["falcon"]="tiiuae/falcon-7b" \

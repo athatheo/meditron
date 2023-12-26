@@ -52,7 +52,11 @@ def tokenizer_param(tokenizer, target, shots=0, cot=False, task_type="mcq"):
     :param task_type: str, the type of answer to generate (mcq or open)
     """
     max_new_tokens = len(tokenizer(target, add_special_tokens=True)['input_ids'])
-    stop_seq = [tokenizer.eos_token, tokenizer.pad_token, "###"]
+    stop_seq = ["###"]
+    if tokenizer.eos_token is not None:
+        stop_seq.append(tokenizer.eos_token)
+    if tokenizer.pad_token is not None:
+        stop_seq.append(tokenizer.pad_token)
 
     if not cot and task_type == "mcq":
         max_new_tokens = len(tokenizer(target[0], add_special_tokens=False)['input_ids'])
@@ -79,7 +83,7 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
     :param cot: bool, whether to use chain-or-thought or not
     :param temperature: float, the temperature to use for sampling
     """
-
+    print("Tokenizer Stop Seq is: ", stop_seq)
     response = client.generate(prompt, sampling_params=vllm.SamplingParams(
         # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
         best_of=1,
@@ -247,12 +251,13 @@ def main(args):
         "trust_remote_code": True,
         "max_num_seqs": 1024,
         "tensor_parallel_size": torch.cuda.device_count(),
+        "dtype": "float16"
     }
 
     if any([x in args.checkpoint_name for x in ["med42", "clinical-camel", "mistral", "mpt",
                                                 "mistral-raw", "falcon", "zephyr"]]):
-        logging.info(f"/pure-mlo-scratch/trial-runs/{args.checkpoint_name}")
-        kwargs["download_dir"] = f"/pure-mlo-scratch/trial-runs/{args.checkpoint_name}"
+        logging.info(f"/home/ubuntu/pure-mlo-scratch/trial-runs/{args.checkpoint_name}")
+        kwargs["download_dir"] = f"/home/ubuntu/pure-mlo-scratch/trial-runs/{args.checkpoint_name}"
 
     if "7b" in args.checkpoint:
         kwargs["tensor_parallel_size"] = 4
