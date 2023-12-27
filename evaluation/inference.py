@@ -9,10 +9,9 @@ import openai
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, LlamaTokenizer
+from transformers import AutoTokenizer, LlamaTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 from benchmarks import benchmark_factory, load_instruction
-
 logger = logging.getLogger("meditron.evaluation.inference")
 logger.setLevel(logging.INFO)
 
@@ -84,20 +83,27 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
     :param temperature: float, the temperature to use for sampling
     """
     max_new_tokens = 5
+    ft_model = client
+    ft_model.eval()
+    prompt = prompt[0]
+    model_input = tokenizer(prompt, return_tensors="pt").to("cuda")
+    
+    with torch.no_grad():
+        response = tokenizer.decode(ft_model.generate(**model_input, max_new_tokens=5, repetition_penalty=1.15)[0], skip_special_tokens=True)
 
-    response = client.generate(prompt, sampling_params=vllm.SamplingParams(
-        # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
-        best_of=1,
-        presence_penalty=0.0,
-        frequency_penalty=1.0,
-        top_k=-1.0,
-        top_p=1.0,
-        temperature=temperature,
-        stop=stop_seq,
-        use_beam_search=False,
-        max_tokens=max_new_tokens,
-        logprobs=5
-    ))
+    # response = client.generate(prompt, sampling_params=vllm.SamplingParams(
+    #     # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
+    #     best_of=1,
+    #     presence_penalty=0.0,
+    #     frequency_penalty=1.0,
+    #     top_k=-1.0,
+    #     top_p=1.0,
+    #     temperature=temperature,
+    #     stop=stop_seq,
+    #     use_beam_search=False,
+    #     max_tokens=max_new_tokens,
+    #     logprobs=5
+    # ))
 
     def top_answer(logprob):
         top_token = max(logprob, key=logprob.get)
@@ -168,6 +174,7 @@ def benchmark_infer(args, tokenizer, data, client=None, seed=1234):
     data_loader = DataLoader(inference_data, batch_size=16, shuffle=False)
 
     batch_counter = 0
+
     for batch in tqdm(data_loader, total=len(data_loader), position=0, leave=True):
         prompts = [format_prompt(prompt, args) for prompt in batch["prompt"]]
         if batch_counter == 0:
@@ -240,7 +247,13 @@ def main(args):
     :param args: argparse.Namespace, the arguments to run the inference pipeline
     """
     partition = INSTRUCTIONS[args.benchmark]['partition']
-    tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
+    base_model_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model_id,
+        padding_side="left",
+        add_eos_token=True,
+        add_bos_token=True,
+    )
     tokenizer.pad_token = tokenizer.eos_token
     logging.info(f'Loaded tokenizer \n\tfrom checkpoint: {args.checkpoint}')
 
@@ -254,7 +267,8 @@ def main(args):
         "trust_remote_code": True,
         "max_num_seqs": 1024,
         "tensor_parallel_size": torch.cuda.device_count(),
-        "dtype": "float16"
+        "dtype": "float16",
+        #"quantization": "squeezellm"
     }
 
     if any([x in args.checkpoint_name for x in ["med42", "clinical-camel", "mistral", "mpt",
@@ -265,8 +279,26 @@ def main(args):
     if "7b" in args.checkpoint:
         kwargs["tensor_parallel_size"] = 4
 
-    client = vllm.LLM(**kwargs)
+    #client = vllm.LLM(**kwargs)
 
+
+    base_model_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.bfloat16
+    )
+
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_id,
+        quantization_config=bnb_config,
+        device_map="auto"
+    )
+
+    #tokenizer = AutoTokenizer.from_pretrained(base_model_id, add_bos_token=True)#, trust_remote_code=True)
+    from peft import PeftModel
+
+    ft_model = PeftModel.from_pretrained(base_model, "/home/ubuntu/choppertron/mixtral-journal-finetune/checkpoint-275")
     logging.info(f'Running inference on {args.benchmark} for {len(data_obj.test_data)} samples')
     if args.shots > 0 and args.multi_seed:
         predictions = pd.DataFrame()
@@ -287,7 +319,7 @@ def main(args):
             predictions = pd.concat([predictions, branches])
             logging.info(f'Finished branch {i+1}/{args.sc_branch}, {len(predictions)} generations collected.')
     else:
-        predictions = benchmark_infer(args, tokenizer, data_obj.test_data, client)
+        predictions = benchmark_infer(args, tokenizer, data_obj.test_data, ft_model)
 
     if args.cot and args.checkpoint_name in ["med42", "clinical-camel", "mistral", "mpt", "falcon", "zephyr"]:
         args.checkpoint_name = "cot" + args.checkpoint_name

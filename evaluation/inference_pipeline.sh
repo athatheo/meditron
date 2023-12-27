@@ -7,6 +7,7 @@ CHECKPOINT_DIR="home/ubuntu/pure-mlo-scratch/"
 checkpoints=(["mpt"]="mosaicml/mpt-7b" \
              ["falcon"]="tiiuae/falcon-7b" \
              ["mistral"]="mistralai/Mistral-7B-Instruct-v0.1" \
+             ["mixtral"]="mistralai/Mixtral-8x7B-Instruct-v0.1" \
              ["zephyr"]="HuggingFaceH4/zephyr-7b-beta" \
              ["baseline-7b"]="/pure-mlo-scratch/llama2/converted_HF_7B_8shard/" \
              ["pmc-7b"]="/pure-mlo-scratch/trial-runs/pmc-7b/hf_checkpoints/raw/pmc-llama-7b" \
@@ -50,7 +51,8 @@ checkpoints=(["mpt"]="mosaicml/mpt-7b" \
              ["meditron-70b-cotmedmcqa"]="${CHECKPOINT_DIR}meditron-70b/hf_checkpoints/instruct/cotmedmcqa/" \
              ["meditron-70b-cotpubmedqa"]="${CHECKPOINT_DIR}meditron-70b/hf_checkpoints/instruct/cotpubmedqa" \
              ["meditron-70b-cotmedqa-qbank"]="${CHECKPOINT_DIR}meditron-70b/hf_checkpoints/instruct/cotmedqa/" \
-             ["meditron-70b-instruct"]="${CHECKPOINT_DIR}meditron-70b/hf_checkpoints/instruct/medical")
+             ["meditron-70b-instruct"]="${CHECKPOINT_DIR}meditron-70b/hf_checkpoints/instruct/medical" \
+             ["mixtral-finetune-guidelines"]="/home/ubuntu/choppertron/mixtral-journal-finetune/checkpoint-275")
 
 CHECKPOINT_NAME=meditron-70b
 BENCHMARK=medmcqa
