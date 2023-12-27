@@ -83,13 +83,14 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
     :param cot: bool, whether to use chain-or-thought or not
     :param temperature: float, the temperature to use for sampling
     """
-    print("Tokenizer Stop Seq is: ", stop_seq)
+    max_new_tokens = 5
+
     response = client.generate(prompt, sampling_params=vllm.SamplingParams(
         # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
         best_of=1,
         presence_penalty=0.0,
         frequency_penalty=1.0,
-        top_k=-1,
+        top_k=-1.0,
         top_p=1.0,
         temperature=temperature,
         stop=stop_seq,
@@ -107,7 +108,8 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
         return [r.outputs[0].text for r in response]
 
     if not cot:
-        return top_answer(response[0].outputs[0].logprobs[0])
+        answer = top_answer(response[0].outputs[0].logprobs[0])
+        return answer
     else:
         return response[0].outputs[0].text
 
@@ -239,6 +241,7 @@ def main(args):
     """
     partition = INSTRUCTIONS[args.benchmark]['partition']
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint)
+    tokenizer.pad_token = tokenizer.eos_token
     logging.info(f'Loaded tokenizer \n\tfrom checkpoint: {args.checkpoint}')
 
     data_obj = benchmark_factory(args.benchmark)

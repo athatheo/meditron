@@ -157,7 +157,6 @@ def verbose_metric_report(metric_dict):
 def eval(output_full, answer, shot=False, cot=False, answer_type="mcq"):
     output = output_full
     default = (2, output_full, answer)
-
     if "\n##" in output:
         try:
             output = output.split("\n##")[1].split("\n")[0].strip().lower()
@@ -217,10 +216,11 @@ def accuracy_metric(data, **kwargs):
     for row in data:
         answer = row['gold'].lower()
         output = row['output'].lower()
+        print("Output: ", output)
         correct, pred, gold = eval(
             output, answer, shot=shot,
             cot=kwargs["cot"], answer_type=kwargs["answer_type"])
-
+        break
         preds.append(pred)
         golds.append(gold)
 
