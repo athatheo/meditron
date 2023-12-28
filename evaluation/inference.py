@@ -67,7 +67,7 @@ def tokenizer_param(tokenizer, target, shots=0, cot=False, task_type="mcq"):
     return max_new_tokens, stop_seq
 
 
-def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=False, temperature=0.0):
+def vllm_infer(client, tokenizer, prompts, stop_seq, max_new_tokens=1024, cot=False, temperature=0.0):
     """
     Generates a single output for a given input prompt using the VLLM backend (offline mode).
     Returns the output text.
@@ -85,11 +85,12 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
     max_new_tokens = 5
     ft_model = client
     ft_model.eval()
-    prompt = prompt[0]
-    model_input = tokenizer(prompt, return_tensors="pt").to("cuda")
-    
-    with torch.no_grad():
-        response = tokenizer.decode(ft_model.generate(**model_input, max_new_tokens=5, repetition_penalty=1.15)[0], skip_special_tokens=True)
+    response = []
+    for prompt in prompts:
+        model_input = tokenizer(prompt, return_tensors="pt").to("cuda")
+        
+        with torch.no_grad():
+            response.append(tokenizer.decode(ft_model.generate(**model_input, max_new_tokens=15, repetition_penalty=1.15)[0], skip_special_tokens=True))
 
     # response = client.generate(prompt, sampling_params=vllm.SamplingParams(
     #     # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
@@ -110,8 +111,17 @@ def vllm_infer(client, tokenizer, prompt, stop_seq, max_new_tokens=1024, cot=Fal
         output_text = tokenizer.decode(top_token, skip_special_tokens=True)
         return output_text
 
+    def q_a_answer(r):
+        print(r[-30:])
+        possible_str = ["Answer: ","\n(", "\n\n",":\na> "]
+        for s in possible_str:
+            if s in r[-30:]:
+                return r[r.index(s)+8:r.index(s)+9]
+        return "Not found"
+        
     if len(response) > 0:
-        return [r.outputs[0].text for r in response]
+        print([q_a_answer(r) for r in response])
+        return [q_a_answer(r) for r in response]
 
     if not cot:
         answer = top_answer(response[0].outputs[0].logprobs[0])
