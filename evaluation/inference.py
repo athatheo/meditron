@@ -82,15 +82,28 @@ def vllm_infer(client, tokenizer, prompts, stop_seq, max_new_tokens=1024, cot=Fa
     :param cot: bool, whether to use chain-or-thought or not
     :param temperature: float, the temperature to use for sampling
     """
+    import time
     max_new_tokens = 5
     ft_model = client
+    ft_model = ft_model.merge_and_unload()
     ft_model.eval()
-    response = []
-    for prompt in prompts:
-        model_input = tokenizer(prompt, return_tensors="pt").to("cuda")
-        
-        with torch.no_grad():
-            response.append(tokenizer.decode(ft_model.generate(**model_input, max_new_tokens=15, repetition_penalty=1.15)[0], skip_special_tokens=True))
+    
+    model_input = tokenizer(prompts,max_length=512,padding='max_length', truncation=True,return_tensors='pt').to("cuda")
+    print(next(ft_model.parameters()).is_cuda)
+    with torch.no_grad():
+        x = time.time()
+        gen = ft_model.generate(**model_input, max_new_tokens=15, repetition_penalty=1.15)
+        print("Generate time: ", (time.time()-x)*1000            )
+        response = tokenizer.decode(gen[0], skip_special_tokens=True)
+    
+    # for i, prompt in enumerate(prompts):
+    #     model_input = tokenizer(prompt, return_tensors="pt").to("cuda")
+    #     with torch.no_grad():
+    #         x = time.time()
+    #         gen = ft_model.generate(**model_input, max_new_tokens=15, repetition_penalty=1.15)
+    #         print("Generate time: ", (time.time()-x)*1000            )
+    #         dec = tokenizer.decode(gen[0], skip_special_tokens=True)
+    #         response.append(dec)
 
     # response = client.generate(prompt, sampling_params=vllm.SamplingParams(
     #     # See https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py
@@ -109,10 +122,10 @@ def vllm_infer(client, tokenizer, prompts, stop_seq, max_new_tokens=1024, cot=Fa
     def top_answer(logprob):
         top_token = max(logprob, key=logprob.get)
         output_text = tokenizer.decode(top_token, skip_special_tokens=True)
+        print("In top answer")
         return output_text
 
     def q_a_answer(r):
-        print(r[-30:])
         possible_str = ["Answer: ","\n(", "\n\n",":\na> "]
         for s in possible_str:
             if s in r[-30:]:
@@ -302,10 +315,9 @@ def main(args):
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_id,
         quantization_config=bnb_config,
-        device_map="auto"
+        device_map="auto",
     )
 
-    #tokenizer = AutoTokenizer.from_pretrained(base_model_id, add_bos_token=True)#, trust_remote_code=True)
     from peft import PeftModel
 
     ft_model = PeftModel.from_pretrained(base_model, "/home/ubuntu/choppertron/mixtral-journal-finetune/checkpoint-275")
